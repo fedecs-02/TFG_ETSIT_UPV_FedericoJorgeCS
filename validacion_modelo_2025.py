@@ -101,7 +101,6 @@ def _selenium_extract_matches(friendly_url: str):
 
 
 def extraer_partidos_2025():
-    print("\n[FASE 1] Extrayendo partidos LF Endesa 2025...")
     params_url = f"{BASE_FEB}/calendario.aspx"
     params = {"g": LEAGUE_ID, "t": SEASON, "nm": LEAGUE_NM}
     try:
@@ -208,9 +207,7 @@ def _parse_players_from_table(soup_table, match_id, team_name, is_local):
         except Exception:
             continue
     return players
-#############################################################
 def _process_match(driver, match_info):
-    """Extrae las jugadoras de un partido individual."""
     url      = match_info.get("link") or f"{BASE_FEB}/Partido.aspx?p={match_info['id_partido']}"
     match_id = match_info["id_partido"]
     nombre_local     = match_info.get("local", "Local")
@@ -243,9 +240,6 @@ def _process_match(driver, match_info):
 
 
 def extraer_jugadoras_2025(matches):
-    """Fase 2: Scraping partido a partido con Selenium."""
-    print(f"\n[FASE 2] Extrayendo estadísticas de {len(matches)} partidos...")
-
     # Si ya existe, cargamos y añadimos solo los nuevos
     partidos_ya_procesados = set()
     all_data = []
@@ -278,13 +272,9 @@ def extraer_jugadoras_2025(matches):
     print(f"  → {len(df)} registros guardados en {FILE_PLAYERS_2025}")
     return df
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 3. LIMPIEZA DE DATOS
-# ═══════════════════════════════════════════════════════════════════
+# 4. LIMPIEZA DE DATOS
 
 def _time_to_float(time_str):
-    """Convierte minutos 'MM:SS' a decimales."""
     if not isinstance(time_str, str):
         return 0.0
     time_str = str(time_str).strip()
@@ -303,8 +293,6 @@ def _time_to_float(time_str):
 
 
 def limpiar_y_preparar(df):
-    """Fase 3: Limpieza y conversión de minutos."""
-    print("\n[FASE 3] Limpiando datos...")
     df["minutos"] = df["minutos"].astype(str).str.strip()
     df_clean = df[
         (df["minutos"] != "00:00") &
@@ -318,14 +306,9 @@ def limpiar_y_preparar(df):
     print(f"  → {len(df_clean)} registros válidos (de {len(df)} totales).")
     return df_clean
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 4A. ESTADÍSTICAS DE EQUIPOS 2025
-# ═══════════════════════════════════════════════════════════════════
+# 5. ESTADÍSTICAS DE EQUIPOS 2025
 
 def obtener_stats_equipos_2025():
-    """Fase 4A: Scrapea estadísticas de TODOS los equipos LF Endesa 2025."""
-    print("\n[FASE 4A] Scrapeando estadísticas de equipos 2025...")
     headers = {
         "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -404,20 +387,9 @@ def obtener_stats_equipos_2025():
     df_eq = pd.DataFrame(datos)
     print(f"  → {len(df_eq)} equipos obtenidos.")
     return df_eq
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 4B. CLUSTERIZACIÓN DE EQUIPOS (= SIMULADOR_V4.py → predecir_cluster)
-# ═══════════════════════════════════════════════════════════════════
+# 6. CLUSTERIZACIÓN DE EQUIPOS (= SIMULADOR_V3.py → predecir_cluster)
 
 def clusterizar_equipos(df_stats, kmeans, scaler):
-    """
-    Para cada equipo calcula ORB% y DRB% relativos al promedio de todos
-    los rivales, y luego aplica el KMeans entrenado.
-    Devuelve df con columnas: equipo, cluster, dist_centroide, PACE.
-    """
-    print("\n[FASE 4B] Clusterizando equipos con KMeans...")
-
     # Media global de ORB/DRB para usar como rival promedio
     mean_orb = df_stats["ORB_med"].mean()
     mean_drb = df_stats["DRB_med"].mean()
@@ -465,12 +437,8 @@ def clusterizar_equipos(df_stats, kmeans, scaler):
     print(f"  → Clusters calculados y guardados en {FILE_EQUIPOS_2025}")
     print(df_cluster[["equipo", "cluster", "dist_centroide", "PACE"]].to_string(index=False))
     return df_cluster
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 4C. INGENIERÍA DE FEATURES JUGADORAS
-# ═══════════════════════════════════════════════════════════════════
-
+    
+# 7. INGENIERÍA DE FEATURES JUGADORAS
 def calcular_ptc_row(row):
     tc_f = (row["t2_int"] - row["t2_met"]) + (row["t3_int"] - row["t3_met"])
     tl_f = row["tl_int"] - row["tl_met"]
@@ -485,12 +453,6 @@ def calcular_ptc_row(row):
 
 
 def generar_features_jugadoras(df_2025, df_historico, df_cluster_equipos, features_list):
-    """
-    Fase 4C: Calcula L6_*, Sn_*, PTC, eFG, USG usando el histórico como base
-    y asigna cluster/PACE del rival a cada fila.
-    """
-    print("\n[FASE 4C] Generando features de jugadoras...")
-
     # 1. Concatenar histórico + 2025 en orden cronológico
     df_historico["temporada"] = df_historico["temporada"].astype(int)
     df_2025["temporada"]      = df_2025["temporada"].astype(int)
@@ -601,13 +563,9 @@ def generar_features_jugadoras(df_2025, df_historico, df_cluster_equipos, featur
 
     return df_train
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 5. PREDICCIÓN Y SIMULACIÓN DE 4 ESCENARIOS
-# ═══════════════════════════════════════════════════════════════════
+# 8. PREDICCIÓN Y SIMULACIÓN DE 4 ESCENARIOS
 
 def _optimizar_minutos(df_partido, col_eficiencia):
-    """Algoritmo de asignación óptima de minutos (= predictor_rendimiento_v2.py)."""
     mins_seguros = df_partido["minutos_float"].replace(0, 0.1)
     eficiencia   = df_partido[col_eficiencia] / mins_seguros
     pesos        = eficiencia.clip(lower=0).values
@@ -634,9 +592,6 @@ def _optimizar_minutos(df_partido, col_eficiencia):
 
 
 def predecir_y_simular(df_train, regresores, features_list):
-    """Fase 5: Aplica modelos y genera los 4 escenarios por jugadora."""
-    print("\n[FASE 5] Predicción XGBoost + simulación de 4 escenarios...")
-
     X = df_train[features_list]
 
     # Predicciones de todas las variables target
@@ -726,14 +681,7 @@ def predecir_y_simular(df_train, regresores, features_list):
     print(f"  → {len(df_esc)} filas generadas (jugadoras × partidos).")
     return df_esc
 
-
-# ═══════════════════════════════════════════════════════════════════
-# 6. EXPORTAR A EXCEL
-# ═══════════════════════════════════════════════════════════════════
-
 def exportar_resultados(df_esc):
-    """Fase 6: Exporta el Excel con hoja global + una hoja por equipo."""
-    print(f"\n[FASE 6] Exportando Excel → {FILE_EXCEL_OUT}")
 
     # Estilo de cabecera
     HEADER_FILL = PatternFill("solid", fgColor="1F3864")
@@ -775,17 +723,12 @@ def exportar_resultados(df_esc):
     print(f"  → Excel guardado: {FILE_EXCEL_OUT}")
     print(f"  → Hojas: 'Todos' + {len(equipos)} equipos.")
 
-
-# ═══════════════════════════════════════════════════════════════════
-# MAIN
-# ═══════════════════════════════════════════════════════════════════
-
 def main():
     print("=" * 65)
     print("  VALIDACIÓN MODELO XGBOOST — LF ENDESA 2025")
     print("=" * 65)
 
-    # ── Carga de modelos ──────────────────────────────────────────
+ 
     print("\n[INFO] Cargando modelos entrenados...")
     regresores  = joblib.load(os.path.join(DIR_MODELOS, "regresores.pkl"))
     features    = joblib.load(os.path.join(DIR_MODELOS, "features.pkl"))
@@ -793,7 +736,6 @@ def main():
     scaler      = joblib.load(os.path.join(DIR_MODELOS, "scaler_cluster.pkl"))
     print(f"  → Modelos cargados. Features del modelo: {len(features)}")
 
-    # ── Fase 1: Partidos 2025 ─────────────────────────────────────
     if os.path.exists(FILE_MATCHES_2025):
         print(f"\n[FASE 1] Cargando partidos desde caché ({FILE_MATCHES_2025})...")
         with open(FILE_MATCHES_2025, "r", encoding="utf-8") as f:
@@ -806,17 +748,14 @@ def main():
         print("[ERROR] No se encontraron partidos. Abortando.")
         return
 
-    # ── Fase 2: Jugadoras 2025 ────────────────────────────────────
     df_raw = extraer_jugadoras_2025(matches)
 
     if df_raw.empty:
         print("[ERROR] Sin datos de jugadoras. Abortando.")
         return
 
-    # ── Fase 3: Limpieza ──────────────────────────────────────────
     df_2025 = limpiar_y_preparar(df_raw)
 
-    # ── Fase 4A: Stats equipos 2025 ───────────────────────────────
     if os.path.exists(FILE_EQUIPOS_2025):
         print(f"\n[FASE 4A] Cargando stats de equipos desde caché ({FILE_EQUIPOS_2025})...")
         df_stats_equipos = pd.read_csv(FILE_EQUIPOS_2025)
@@ -831,25 +770,19 @@ def main():
         df_stats_equipos_raw = obtener_stats_equipos_2025()
         df_cluster_equipos   = clusterizar_equipos(df_stats_equipos_raw, kmeans, scaler)
 
-    # ── Fase 4B ya incluida en clusterizar_equipos ────────────────
-
-    # ── Carga del histórico ───────────────────────────────────────
     print(f"\n[INFO] Cargando histórico de jugadoras ({FILE_HISTORICO})...")
     df_historico = pd.read_csv(FILE_HISTORICO).fillna(0)
     df_historico["nombre"] = df_historico["nombre"].str.upper().str.strip()
     print(f"  → {len(df_historico)} registros históricos.")
 
-    # ── Fase 4C: Features ─────────────────────────────────────────
     df_train = generar_features_jugadoras(df_2025, df_historico, df_cluster_equipos, features)
 
     if df_train.empty:
         print("[ERROR] Sin datos de entrenamiento para 2025. Abortando.")
         return
 
-    # ── Fase 5: Predicción + 4 escenarios ─────────────────────────
     df_escenarios = predecir_y_simular(df_train, regresores, features)
 
-    # ── Fase 6: Excel ─────────────────────────────────────────────
     exportar_resultados(df_escenarios)
 
     # Guardar también CSV de respaldo
