@@ -1328,8 +1328,8 @@ if 'datos_simulacion' in st.session_state:
                         st.success(" Informe generado con éxito")
                         with st.container(border=True):
                             st.markdown(f"#### Reporte Pre-Partido: {d['equipo_local']} vs {d['equipo_visitante']}")
-                            st.markdown("---") # Una línea divisoria elegante
-                            st.markdown(respuesta.text) # Aquí el Markdown sí se renderizará perfecto
+                            st.markdown("---") 
+                            st.markdown(respuesta.text) 
                 except Exception as e:
                     st.error(f"Error de conexión con la IA: {e}")
 
